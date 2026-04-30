@@ -1,0 +1,1 @@
+# Tests for SkySim5000 analysis package
