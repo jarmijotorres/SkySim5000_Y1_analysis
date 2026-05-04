@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
+import h5py
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,7 +29,7 @@ from utils.plotting import set_plot_style, add_colorbar
 def plot_cmd_with_marginals(results, z_min, z_max, output_dir):
     """
     Create colour-magnitude diagram with marginal distributions
-    Colored by both M_r and stellar mass
+    Using 2D histogram colored by log N of galaxies
     
     Parameters
     ----------
@@ -67,80 +68,84 @@ def plot_cmd_with_marginals(results, z_min, z_max, output_dir):
     fig = plt.figure(figsize=(16, 8))
     
     # Define grid for subplots with marginals
-    gs = gridspec.GridSpec(2, 4, figure=fig, 
-                          width_ratios=[1, 3, 1, 3], 
+    # Remove right marginal for second plot
+    gs = gridspec.GridSpec(2, 4, figure=fig,
+                          width_ratios=[1, 3, 0.1, 3],
                           height_ratios=[1, 3],
                           hspace=0.05, wspace=0.3)
     
-    # First CMD colored by M_r
+    # First CMD colored by log N
     ax_cmd1 = fig.add_subplot(gs[1, 1])
     ax_hist_top1 = fig.add_subplot(gs[0, 1], sharex=ax_cmd1)
     ax_hist_right1 = fig.add_subplot(gs[1, 0], sharey=ax_cmd1)
     
-    # Second CMD colored by stellar mass
+    # Second CMD colored by log N (stellar mass binned)
     ax_cmd2 = fig.add_subplot(gs[1, 3])
     ax_hist_top2 = fig.add_subplot(gs[0, 3], sharex=ax_cmd2)
-    ax_hist_right2 = fig.add_subplot(gs[1, 2], sharey=ax_cmd2)
     
-    # Plot first CMD (colored by M_r)
-    scatter1 = ax_cmd1.scatter(mag_r, color_gr, c=mag_r, 
-                              cmap='viridis_r', s=1, alpha=0.5,
-                              rasterized=True)
+    # Create 2D histogram for first CMD (M_r)
+    hist1, xedges1, yedges1 = np.histogram2d(mag_r, color_gr, bins=50)
+    # Add small value to avoid log(0)
+    hist1_log = np.log10(hist1.T + 1)
+    
+    # Plot as color map
+    im1 = ax_cmd1.imshow(hist1_log, origin='lower', aspect='auto',
+                         extent=[xedges1[0], xedges1[-1], yedges1[0], yedges1[-1]],
+                         cmap='viridis', interpolation='nearest')
     ax_cmd1.set_xlabel(r'$M_r$', fontsize=14)
     ax_cmd1.set_ylabel(r'$(g-r)$', fontsize=14)
-    ax_cmd1.set_title(r'CMD colored by $M_r$', fontsize=14)
+    ax_cmd1.set_title(r'CMD colored by $\log N$ (galaxies)', fontsize=14)
     ax_cmd1.invert_xaxis()
     ax_cmd1.set_xlim(-16, -24)
     ax_cmd1.set_ylim(-0.2, 1.5)
     
-    # Add colorbar for M_r
-    cbar1 = plt.colorbar(scatter1, ax=ax_cmd1, pad=0.02)
-    cbar1.set_label(r'$M_r$', fontsize=12)
+    # Add colorbar for log N
+    cbar1 = plt.colorbar(im1, ax=ax_cmd1, pad=0.02)
+    cbar1.set_label(r'$\log_{10}(N + 1)$', fontsize=12)
     
-    # Marginal distributions for first CMD
-    ax_hist_top1.hist(mag_r, bins=50, color='steelblue', alpha=0.7, density=True)
+    # Marginal distributions for first CMD (using histtype='step')
+    ax_hist_top1.hist(mag_r, bins=50, histtype='step', color='steelblue',
+                      linewidth=2, density=True)
     ax_hist_top1.set_ylabel('Density', fontsize=10)
     ax_hist_top1.set_xlim(ax_cmd1.get_xlim())
     plt.setp(ax_hist_top1.get_xticklabels(), visible=False)
     
-    ax_hist_right1.hist(color_gr, bins=50, orientation='horizontal', 
-                       color='steelblue', alpha=0.7, density=True)
+    ax_hist_right1.hist(color_gr, bins=50, orientation='horizontal',
+                       histtype='step', color='steelblue', linewidth=2, density=True)
     ax_hist_right1.set_xlabel('Density', fontsize=10)
     ax_hist_right1.set_ylim(ax_cmd1.get_ylim())
     plt.setp(ax_hist_right1.get_yticklabels(), visible=False)
     ax_hist_right1.invert_xaxis()
     
-    # Plot second CMD (colored by stellar mass)
-    scatter2 = ax_cmd2.scatter(mag_r, color_gr, c=log_stellar_mass, 
-                              cmap='plasma', s=1, alpha=0.5,
-                              rasterized=True)
-    ax_cmd2.set_xlabel(r'$M_r$', fontsize=14)
+    # Create 2D histogram for second CMD (M_star)
+    # Use stellar mass instead of M_r for x-axis
+    hist2, xedges2, yedges2 = np.histogram2d(log_stellar_mass, color_gr, bins=50)
+    hist2_log = np.log10(hist2.T + 1)
+    
+    # Plot as color map
+    im2 = ax_cmd2.imshow(hist2_log, origin='lower', aspect='auto',
+                         extent=[xedges2[0], xedges2[-1], yedges2[0], yedges2[-1]],
+                         cmap='viridis', interpolation='nearest')
+    ax_cmd2.set_xlabel(r'$\log(M_*/M_\odot)$', fontsize=14)
     ax_cmd2.set_ylabel(r'$(g-r)$', fontsize=14)
-    ax_cmd2.set_title(r'CMD colored by Stellar Mass', fontsize=14)
-    ax_cmd2.invert_xaxis()
-    ax_cmd2.set_xlim(-16, -24)
+    ax_cmd2.set_title(r'CMD colored by $\log N$ (galaxies)', fontsize=14)
+    ax_cmd2.set_xlim(8, 12)
     ax_cmd2.set_ylim(-0.2, 1.5)
     
-    # Add colorbar for stellar mass
-    cbar2 = plt.colorbar(scatter2, ax=ax_cmd2, pad=0.02)
-    cbar2.set_label(r'$\log(M_*/M_\odot)$', fontsize=12)
+    # Add colorbar for log N
+    cbar2 = plt.colorbar(im2, ax=ax_cmd2, pad=0.02)
+    cbar2.set_label(r'$\log_{10}(N + 1)$', fontsize=12)
     
-    # Marginal distributions for second CMD
-    ax_hist_top2.hist(mag_r, bins=50, color='tomato', alpha=0.7, density=True)
+    # Marginal distribution for second CMD (top only)
+    ax_hist_top2.hist(log_stellar_mass, bins=50, histtype='step', color='tomato',
+                      linewidth=2, density=True)
     ax_hist_top2.set_ylabel('Density', fontsize=10)
     ax_hist_top2.set_xlim(ax_cmd2.get_xlim())
     plt.setp(ax_hist_top2.get_xticklabels(), visible=False)
     
-    ax_hist_right2.hist(color_gr, bins=50, orientation='horizontal', 
-                       color='tomato', alpha=0.7, density=True)
-    ax_hist_right2.set_xlabel('Density', fontsize=10)
-    ax_hist_right2.set_ylim(ax_cmd2.get_ylim())
-    plt.setp(ax_hist_right2.get_yticklabels(), visible=False)
-    ax_hist_right2.invert_xaxis()
-    
     # Overall title
     fig.suptitle(f'Color-Magnitude Diagrams with Marginal Distributions\n'
-                 f'Volume Complete Sample: z=[{z_min:.2f}, {z_max:.2f}]', 
+                 f'Volume Complete Sample: z=[{z_min:.2f}, {z_max:.2f}]',
                  fontsize=16, y=0.98)
     
     # Save plot
@@ -153,7 +158,7 @@ def plot_cmd_with_marginals(results, z_min, z_max, output_dir):
 
 def plot_sfr_distributions_comparison(all_results, z_bins, output_dir):
     """
-    Create SFR 1D distributions for all redshift bins in a single plot
+    Create SFR and sSFR 1D distributions for all redshift bins in a single plot
     
     Parameters
     ----------
@@ -169,107 +174,186 @@ def plot_sfr_distributions_comparison(all_results, z_bins, output_dir):
     # Set plotting style
     set_plot_style()
     
-    # Create figure with subplots for different SFR measurements
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    axes = axes.flatten()
+    # Create figure with two subplots side by side
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
     # Define colors for each redshift bin
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
     
-    # Plot 1: log SFR (observed)
-    ax = axes[0]
-    for i, (results, (z_min, z_max)) in enumerate(zip(all_results, z_bins)):
-        if 'log_sfr_uv_obs' in results:
-            data = results['log_sfr_uv_obs']
-            valid = np.isfinite(data)
-            ax.hist(data[valid], bins=50, alpha=0.6, density=True,
-                   label=f'z=[{z_min:.2f}, {z_max:.2f}]',
-                   color=colors[i % len(colors)], 
-                   edgecolor='black', linewidth=0.5)
-    
-    ax.set_xlabel(r'$\log(\mathrm{SFR}_{\mathrm{UV,obs}}/M_\odot\,\mathrm{yr}^{-1})$', fontsize=12)
-    ax.set_ylabel('Normalized Density', fontsize=12)
-    ax.set_title('UV SFR Distribution (Observed)', fontsize=14)
-    ax.legend(loc='upper right')
-    ax.set_xlim(-3, 3)
-    
-    # Plot 2: log SFR (dust corrected)
-    ax = axes[1]
+    # Plot 1: log SFR (dust corrected) - left panel
     for i, (results, (z_min, z_max)) in enumerate(zip(all_results, z_bins)):
         if 'log_sfr_uv_corr' in results:
             data = results['log_sfr_uv_corr']
             valid = np.isfinite(data)
-            ax.hist(data[valid], bins=50, alpha=0.6, density=True,
-                   label=f'z=[{z_min:.2f}, {z_max:.2f}]',
-                   color=colors[i % len(colors)],
-                   edgecolor='black', linewidth=0.5)
+            ax1.hist(data[valid], bins=50, histtype='step', density=True,
+                    label=f'z=[{z_min:.2f}, {z_max:.2f}]',
+                    color=colors[i % len(colors)],
+                    linewidth=2, alpha=0.8)
     
-    ax.set_xlabel(r'$\log(\mathrm{SFR}_{\mathrm{UV,corr}}/M_\odot\,\mathrm{yr}^{-1})$', fontsize=12)
-    ax.set_ylabel('Normalized Density', fontsize=12)
-    ax.set_title('UV SFR Distribution (Dust Corrected)', fontsize=14)
-    ax.legend(loc='upper right')
-    ax.set_xlim(-3, 3)
+    ax1.set_xlabel(r'$\log(\mathrm{SFR}/M_\odot\,\mathrm{yr}^{-1})$', fontsize=14)
+    ax1.set_ylabel('Normalized Density', fontsize=14)
+    ax1.set_title('Star Formation Rate Distribution', fontsize=16)
+    ax1.legend(loc='upper right', fontsize=12)
+    ax1.set_xlim(-3, 3)
+    ax1.grid(True, alpha=0.3)
     
-    # Plot 3: log sSFR
-    ax = axes[2]
+    # Plot 2: log sSFR - right panel
     for i, (results, (z_min, z_max)) in enumerate(zip(all_results, z_bins)):
         if 'log_ssfr' in results:
             data = results['log_ssfr']
             valid = np.isfinite(data)
-            ax.hist(data[valid], bins=50, alpha=0.6, density=True,
-                   label=f'z=[{z_min:.2f}, {z_max:.2f}]',
-                   color=colors[i % len(colors)],
-                   edgecolor='black', linewidth=0.5)
+            ax2.hist(data[valid], bins=50, histtype='step', density=True,
+                    label=f'z=[{z_min:.2f}, {z_max:.2f}]',
+                    color=colors[i % len(colors)],
+                    linewidth=2, alpha=0.8)
     
-    ax.set_xlabel(r'$\log(\mathrm{sSFR}/\mathrm{yr}^{-1})$', fontsize=12)
-    ax.set_ylabel('Normalized Density', fontsize=12)
-    ax.set_title('Specific SFR Distribution', fontsize=14)
-    ax.legend(loc='upper left')
-    ax.set_xlim(-12, -8)
-    
-    # Plot 4: Statistics summary
-    ax = axes[3]
-    ax.axis('off')
-    
-    # Create statistics table
-    stats_text = "SFR Statistics Summary\n" + "="*40 + "\n\n"
-    
-    for i, (results, (z_min, z_max)) in enumerate(zip(all_results, z_bins)):
-        stats_text += f"z=[{z_min:.2f}, {z_max:.2f}]:\n"
-        
-        if 'log_sfr_uv_corr' in results:
-            sfr_data = results['log_sfr_uv_corr']
-            valid = np.isfinite(sfr_data)
-            sfr_valid = sfr_data[valid]
-            
-            stats_text += f"  N galaxies: {len(sfr_valid):,}\n"
-            stats_text += f"  Mean log(SFR): {np.mean(sfr_valid):.2f}\n"
-            stats_text += f"  Median log(SFR): {np.median(sfr_valid):.2f}\n"
-            stats_text += f"  Std log(SFR): {np.std(sfr_valid):.2f}\n"
-            
-            # Star-forming fraction
-            if 'is_star_forming' in results:
-                sf_frac = np.sum(results['is_star_forming']) / len(results['is_star_forming'])
-                stats_text += f"  Star-forming fraction: {sf_frac:.2%}\n"
-        
-        stats_text += "\n"
-    
-    ax.text(0.1, 0.9, stats_text, transform=ax.transAxes,
-            fontsize=11, verticalalignment='top',
-            fontfamily='monospace',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.8))
+    ax2.set_xlabel(r'$\log(\mathrm{sSFR}/\mathrm{yr}^{-1})$', fontsize=14)
+    ax2.set_ylabel('Normalized Density', fontsize=14)
+    ax2.set_title('Specific Star Formation Rate Distribution', fontsize=16)
+    ax2.legend(loc='upper left', fontsize=12)
+    ax2.set_xlim(-12, -8)
+    ax2.grid(True, alpha=0.3)
     
     # Overall title
-    fig.suptitle('Star Formation Rate Distributions Across Redshift', fontsize=16)
+    fig.suptitle('Star Formation Rate Distributions Across Redshift', fontsize=18, y=1.02)
     
     plt.tight_layout()
     
     # Save plot
-    plot_file = output_dir / 'sfr_distributions_all_redshifts.png'
+    plot_file = output_dir / 'sfr_ssfr_distributions_all_redshifts.png'
     plt.savefig(plot_file, dpi=150, bbox_inches='tight')
     plt.close()
     
-    print(f"\n  Saved SFR distributions comparison plot: {plot_file}")
+    print(f"\n  Saved SFR/sSFR distributions comparison plot: {plot_file}")
+
+
+def plot_metallicity_distribution(results, z_min, z_max, output_dir):
+    """
+    Create 1D metallicity distribution plot with log-scale y-axis
+    
+    Parameters
+    ----------
+    results : dict
+        Dictionary with galaxy properties
+    z_min : float
+        Minimum redshift
+    z_max : float
+        Maximum redshift
+    output_dir : Path
+        Output directory
+    """
+    output_dir = Path(output_dir)
+    
+    # Set plotting style
+    set_plot_style()
+    
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    
+    # Get metallicity data
+    if 'metallicity_fmr' in results:
+        metallicity = results['metallicity_fmr']
+        valid = np.isfinite(metallicity)
+        metallicity_valid = metallicity[valid]
+        
+        # Plot histogram
+        counts, bins, patches = ax.hist(metallicity_valid, bins=50,
+                                       range=(-5, 15),
+                                       histtype='step',
+                                       color='darkblue',
+                                       linewidth=2,
+                                       label='FMR metallicity')
+        
+        # Set log scale for y-axis
+        ax.set_yscale('log')
+        
+        # Labels and title
+        ax.set_xlabel(r'$12 + \log(\mathrm{O/H})$', fontsize=14)
+        ax.set_ylabel('Number of galaxies', fontsize=14)
+        ax.set_title(f'Metallicity Distribution\nz=[{z_min:.2f}, {z_max:.2f}]', fontsize=16)
+        
+        # Set x-axis limits
+        ax.set_xlim(-5, 15)
+        
+        # Add grid
+        ax.grid(True, alpha=0.3, which='both')
+        
+        # Add statistics text
+        stats_text = f'N = {len(metallicity_valid):,}\n'
+        stats_text += f'Mean = {np.mean(metallicity_valid):.2f}\n'
+        stats_text += f'Median = {np.median(metallicity_valid):.2f}\n'
+        stats_text += f'Std = {np.std(metallicity_valid):.2f}'
+        
+        ax.text(0.95, 0.95, stats_text, transform=ax.transAxes,
+                fontsize=11, verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
+        
+        # Save plot
+        plot_file = output_dir / f'metallicity_distribution_z{z_min:.2f}-{z_max:.2f}.png'
+        plt.savefig(plot_file, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        print(f"  Saved metallicity distribution plot: {plot_file}")
+    else:
+        print("  Warning: Cannot create metallicity plot - missing metallicity data")
+
+
+def save_all_redshift_bins_hdf5(all_results, z_bins, output_dir):
+    """
+    Save all redshift bins data in a single HDF5 file
+    
+    Parameters
+    ----------
+    all_results : list of dict
+        List of results dictionaries for each redshift bin
+    z_bins : list of tuples
+        List of (z_min, z_max) tuples
+    output_dir : Path
+        Output directory
+    """
+    output_dir = Path(output_dir)
+    
+    # Create filename
+    filename = "skysim5000_all_redshift_bins.h5"
+    filepath = output_dir / filename
+    
+    print(f"\nSaving all redshift bins to: {filepath}")
+    
+    with h5py.File(filepath, 'w') as f:
+        # Add global metadata
+        f.attrs['n_redshift_bins'] = len(z_bins)
+        f.attrs['description'] = 'Volume complete samples for all redshift bins'
+        from datetime import datetime
+        f.attrs['creation_date'] = datetime.now().isoformat()
+        
+        # Save each redshift bin
+        for i, (results, (z_min, z_max)) in enumerate(zip(all_results, z_bins)):
+            # Create group for this redshift bin
+            grp_name = f'z{z_min:.2f}_{z_max:.2f}'
+            grp = f.create_group(grp_name)
+            
+            # Add metadata for this bin
+            grp.attrs['z_min'] = z_min
+            grp.attrs['z_max'] = z_max
+            grp.attrs['n_galaxies'] = len(results['redshift_true'])
+            if 'abs_mag_limit' in results:
+                grp.attrs['abs_mag_limit'] = results['abs_mag_limit']
+            
+            # Save data arrays
+            for key, value in results.items():
+                if key in ['z_min', 'z_max', 'abs_mag_limit']:
+                    continue  # Skip metadata already saved as attributes
+                
+                try:
+                    data = np.array(value)
+                    if data.dtype == bool:
+                        data = data.astype(np.uint8)
+                    grp.create_dataset(key, data=data, compression='gzip')
+                except Exception as e:
+                    print(f"    Warning: Could not save {key}: {e}")
+    
+    print(f"  Successfully saved all redshift bins to HDF5")
+    return filepath
 
 
 def run_analysis(data_file_path):
@@ -349,6 +433,9 @@ def run_analysis(data_file_path):
         # Create CMD with marginal distributions
         plot_cmd_with_marginals(results, z_min, z_max, output_dir)
         
+        # Create metallicity distribution plot
+        plot_metallicity_distribution(results, z_min, z_max, output_dir)
+        
         # Store results for comparison plots
         all_results.append(results)
         
@@ -356,8 +443,11 @@ def run_analysis(data_file_path):
         print(f"Output saved to: {filepath}")
     
     # Create SFR distributions comparison plot
-    print("\nCreating SFR distributions comparison plot...")
+    print("\nCreating SFR/sSFR distributions comparison plot...")
     plot_sfr_distributions_comparison(all_results, z_bins, output_dir)
+    
+    # Save all redshift bins in one HDF5 file
+    hdf5_filepath = save_all_redshift_bins_hdf5(all_results, z_bins, output_dir)
     
     print(f"\n{'='*60}")
     print("Analysis complete!")
