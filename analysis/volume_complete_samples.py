@@ -358,8 +358,8 @@ def main():
     print("="*60)
     
     # Configuration
-    data_file = "/path/to/skysim5000.h5"  # Update this path
-    output_dir = Path("analysis/volume_complete_catalogs")
+    data_file = '/pscratch/sd/j/jatorres/data/GalCat/SkySim5000/SkySim5000small_Sel_rband25_ugriz_SED1246_306disk_TrueMag_RADEC_POS_VEL_photoz_specz_stellarMass_HaloMass.hdf5'  # Update this path
+    output_dir = Path("/pscratch/sd/j/jatorres/data/GalCat/SkySim5000/analysis/volume_complete_catalogs")
     output_dir.mkdir(exist_ok=True, parents=True)
     
     # Redshift bins

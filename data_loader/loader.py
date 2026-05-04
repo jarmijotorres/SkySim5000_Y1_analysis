@@ -37,7 +37,7 @@ class DataLoader:
             self._file.close()
             
     def load_data(self, columns: Optional[List[str]] = None, 
-                  group: str = 'SkySim5000_small') -> Dict[str, np.ndarray]:
+                  group: str = 'SkySim5000small') -> Dict[str, np.ndarray]:
         """
         Load data from the HDF5 file
         
@@ -46,7 +46,7 @@ class DataLoader:
         columns : list of str, optional
             Specific columns to load. If None, loads all columns
         group : str
-            HDF5 group name (default: 'SkySim5000_small')
+            HDF5 group name (default: 'SkySim5000small')
             
         Returns
         -------
